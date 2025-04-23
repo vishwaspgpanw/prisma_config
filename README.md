@@ -118,11 +118,12 @@ The Prisma Config Utility will default to using the SDK version. An out-of-date 
      - Update the YAML file to remove the interface configuration of type port, include interface configuration of type bypasspair and use the do_site utiltiy to push the bypasspair configuration.
 
 #### Version
-| Version | Build | Changes |
-| ------- | ----- | ------- |
-|  6.3.1  | **b1** | Initial Release. |
-|  6.5.1  | **b1** | Support for Prisma SASE SDK 6.5.1. |
-|  6.5.1  | **b2** | Fix for CGSDW-31314       |
+| Version | Build | Changes                            |
+|---------| ----- |------------------------------------|
+| 6.3.1   | **b1** | Initial Release.                   |
+| 6.5.1   | **b1** | Support for Prisma SASE SDK 6.5.1. |
+| 6.5.1   | **b2** | Fix for CGSDW-31314                |
+| 6.5.2   | **b1** | Support for Prisma SASE SDK 6.5.2  |
 
 
 

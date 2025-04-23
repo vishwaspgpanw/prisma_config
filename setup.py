@@ -4,7 +4,7 @@ with open('README.md') as f:
     long_description = f.read()
 
 setup(name='prisma_config',
-      version='6.5.1b2',
+      version='6.5.2b1',
       description='Configuration exporting and Continuous Integration (CI) capable configuration importing for the '
                   'Prisma SDWAN Cloud Controller.',
       long_description=long_description,
@@ -14,7 +14,7 @@ setup(name='prisma_config',
       author_email='prisma-sase-developers@paloaltonetworks.com',
       license='MIT',
       install_requires=[
-            'prisma_sase >= 6.5.1b1, < 6.5.2b1',
+            'prisma_sase >= 6.5.2b1, < 6.6.1b1',
             'PyYAML >= 5.3'
       ],
       packages=['prisma_config'],
