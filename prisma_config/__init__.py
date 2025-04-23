@@ -112,7 +112,8 @@ ALREADY_NAGGED_DUP_KEYS = []
 nameable_interface_types = [
     'service_link',
     'virtual_interface',
-    'vlan'
+    'vlan',
+    'loopback'
 ]
 
 skip_interface_list = [

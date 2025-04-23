@@ -4550,9 +4550,6 @@ def delete_prefixdistributionspokelists(leftover_prefixdistributionspokelists, s
 
     return
 
-
-
-
 def create_interface(config_interface, interfaces_n2id, waninterfaces_n2id, lannetworks_n2id, site_id, element_id,
                      api_interfaces_cache=None, interfaces_funny_n2id=None, version=None):
     """
@@ -4719,6 +4716,7 @@ def create_interface(config_interface, interfaces_n2id, waninterfaces_n2id, lann
                 interface_template["nat_pools"] = n2id_np_template
             else:
                 interface_template["nat_pools"] = None
+
         elif key == 'cellular_config':
             # look for key in config, xlate name to ID.
             config_cellular = config_interface.get('cellular_config', {})
@@ -4732,6 +4730,30 @@ def create_interface(config_interface, interfaces_n2id, waninterfaces_n2id, lann
                 name_lookup_in_template(n2id_cellular_template, 'apnprofile_id', apnprofiles_n2id)
                 name_lookup_in_template(n2id_cellular_template, 'parent_module_id', element_cellular_modules_n2id)
                 interface_template['cellular_config'] = n2id_cellular_template
+
+        elif key == "bound_interfaces":
+            bound_ifaces = config_interface.get('bound_interfaces', [])
+
+            if bound_ifaces:
+                bound_iface_list = []
+
+                for bound_iface in bound_ifaces:
+                    bound_iface_list.append(interfaces_n2id.get(bound_iface))
+
+                interface_template['bound_interfaces'] = bound_iface_list
+
+        elif key == 'loopback_config':
+            config_loopback = config_interface.get('loopback_config', None)
+            if config_loopback:
+                # Setting loopback_config to None during create as the used_for might have changed.
+                # Update it again after ports
+                interface_template['loopback_config'] = None
+                # n2id_loopback_template = copy.deepcopy(config_loopback)
+                #
+                # name_lookup_in_template(n2id_loopback_template, 'binding_interface_id', interfaces_n2id)
+                #
+                # interface_template['loopback_config'] = n2id_loopback_template
+
         else:
             # just set the key.
             interface_template[key] = value
@@ -5055,6 +5077,16 @@ def modify_interface(config_interface, interface_id, interfaces_n2id, waninterfa
                 for bound_iface in bound_ifaces:
                     bound_iface_list.append(interfaces_n2id.get(bound_iface))
                 interface_template['bound_interfaces'] = bound_iface_list
+
+        elif key == 'loopback_config':
+            config_loopback = config_interface.get('loopback_config', None)
+            if config_loopback:
+                n2id_loopback_template = copy.deepcopy(config_loopback)
+
+                name_lookup_in_template(n2id_loopback_template, 'binding_interface_id', interfaces_n2id)
+
+                interface_template['loopback_config'] = n2id_loopback_template
+
         elif key == 'cellular_config':
             # look for key in config, xlate name to ID.
             config_cellular = config_interface.get('cellular_config', {})
@@ -10184,33 +10216,50 @@ def do_site(loaded_config, destroy, declaim=False, passed_sdk=None, passed_timeo
                 mapping_id2tag_interface(interfaces_resp)
 
                 # START LOOPBACKS ADD: need to handle base interfaces (bypass members) first. Get the looback IF deltas.
-                config_loopback_add, api_loopback_del, \
-                    config_loopback_n2id = get_loopback_lists(config_interfaces, interfaces_cache, interfaces_n2id)
-                interfaces_funny_n2id.update(config_loopback_n2id)
 
-                local_debug("CONFIG_LOOPBACK_ADD: ", config_loopback_add)
-
-                # do add loopback now
+                config_loopbacks = get_config_interfaces_by_type(config_interfaces, 'loopback')
+                leftover_loopbacks = get_api_interfaces_name_by_type(interfaces_cache, 'loopback',
+                                                                         key_name='id')
                 added_loopback_list = []
-                for config_loopback_name, config_loopback_value in config_loopback_add.items():
+                for config_interface_name, config_interface_value in config_loopbacks.items():
+                    # look for unconfigurable interfaces.
+                    if config_interface_name in skip_interface_list:
+                        throw_warning("Interface {0} is not configurable.".format(config_interface_name))
+                        # dont configure this interface, break out of loop.
+                        continue
+
                     # recombine object
-                    config_interface = recombine_named_key_value(config_loopback_name, config_loopback_value,
+                    config_interface = recombine_named_key_value(config_interface_name, config_interface_value,
                                                                  name_key='name')
 
-                    added_loopback = create_interface(config_interface, interfaces_n2id, waninterfaces_n2id,
-                                                      lannetworks_n2id, site_id, element_id, version=interfaces_version)
+                    # no need to get interface config, no child config objects.
 
-                    # save the loopback IFs added, so later we can just modify non-added loopbacks.
-                    added_loopback_list.append(added_loopback)
+                    # Determine interface ID.
+                    # look for implicit ID in object.
+                    implicit_interface_id = config_interface.get('id')
+                    # Loopbacks name is unsettable, use parent ID for location.
+                    name_interface_id = interfaces_n2id.get(config_interface_name)
 
-                # update interfaces cache now that all base interfaces are present.
-                interfaces_resp = sdk.get.interfaces(site_id, element_id)
-                interfaces_cache, _ = extract_items(interfaces_resp, 'interfaces')
-                interfaces_n2id = build_lookup_dict(interfaces_cache)
-                # get the looback IF deltas again.
-                config_loopback_add, api_loopback_del, \
-                    config_loopback_n2id = get_loopback_lists(config_interfaces, interfaces_cache, interfaces_n2id)
-                interfaces_funny_n2id.update(config_loopback_n2id)
+                    if implicit_interface_id is not None:
+                        interface_id = implicit_interface_id
+
+                    elif name_interface_id is not None:
+                        # look up ID by name on existing interfaces.
+                        interface_id = name_interface_id
+                    else:
+                        # no interface object.
+                        interface_id = None
+
+                    if not interface_id:
+                        # no loopbacks should ever get added here, but keep code just in case something falls through.
+                        added_loopback = create_interface(config_interface, interfaces_n2id, waninterfaces_n2id,
+                                                          lannetworks_n2id, site_id, element_id,
+                                                          version=interfaces_version)
+
+                        # save the loopback IFs added, so later we can just modify non-added loopbacks.
+                        # added_loopback_list.append(added_loopback)
+
+                    leftover_loopbacks = [entry for entry in leftover_loopbacks if entry != interface_id]
 
                 # END LOOPBACKS ADD (need modify and delete )
 
@@ -10809,9 +10858,6 @@ def do_site(loaded_config, destroy, declaim=False, passed_sdk=None, passed_timeo
                 # END SUBINTERFACE
 
                 # START LOOPBACKS
-
-                # create a leftover_loopbacks construct from the api_loopback_del output from get_loopback_lists
-                leftover_loopbacks = [entry['id'] for entry in api_loopback_del if entry.get('id')]
 
                 # cleanup - delete unused loopbacks
                 delete_interfaces(leftover_loopbacks, site_id, element_id, id2n=interfaces_id2n)
@@ -11500,71 +11546,6 @@ def do_site(loaded_config, destroy, declaim=False, passed_sdk=None, passed_timeo
                     # no need for delete queue, as already deleted.
 
                 # END BYPASSPAIRS
-                # START LOOPBACKS MODIFY
-
-                config_loopbacks = get_config_interfaces_by_type(config_interfaces_defaults, 'loopback')
-                for config_interface_name, config_interface_value in config_loopbacks.items():
-
-                    local_debug("IF: {0}, PARENT2CHILD".format(config_interface_name),
-                                config_parent2child.keys())
-                    # look for unconfigurable interfaces.
-                    if config_interface_name in skip_interface_list:
-                        throw_warning("Interface {0} is not configurable.".format(config_interface_name))
-                        # dont configure this interface, break out of loop.
-                        continue
-                    # look for parent interface
-                    elif config_interface_name in config_parent2child.keys():
-                        throw_warning("Cannot configure interface {0}, it is set as a parent for {1}."
-                                      "".format(config_interface_name,
-                                                ", ".join(config_parent2child.get(config_interface_name))))
-                        # skip this interface
-                        continue
-
-                    # recombine object
-                    config_interface = recombine_named_key_value(config_interface_name, config_interface_value,
-                                                                 name_key='name')
-
-                    # no need to get interface config, no child config objects.
-
-                    # Determine interface ID.
-                    # look for implicit ID in object.
-                    implicit_interface_id = config_interface.get('id')
-                    # Loopbacks name is unsettable, use parent ID for location.
-                    name_interface_id = interfaces_n2id.get(config_interface_name)
-
-                    if implicit_interface_id is not None:
-                        interface_id = implicit_interface_id
-
-                    elif name_interface_id is not None:
-                        # look up ID by name on existing interfaces.
-                        interface_id = name_interface_id
-                    else:
-                        # no interface object.
-                        interface_id = None
-
-                    # check if interface_id was already added.
-                    if interface_id in added_loopback_list:
-                        # this interface was added above. Skip.
-                        continue
-
-                    # Create or modify interface.
-                    if interface_id is not None:
-                        # Interface exists, modify.
-                        interface_id = modify_interface(config_interface, interface_id, interfaces_n2id,
-                                                        waninterfaces_n2id, lannetworks_n2id, site_id,
-                                                        element_id, interfaces_funny_n2id=interfaces_funny_n2id,
-                                                        version=interfaces_version)
-
-                    else:
-                        # no loopbacks should ever get added here, but keep code just in case something falls through.
-                        # Interface does not exist, create.
-                        interface_id = create_interface(config_interface, interfaces_n2id, waninterfaces_n2id,
-                                                        lannetworks_n2id, site_id, element_id,
-                                                        interfaces_funny_n2id=interfaces_funny_n2id, version=interfaces_version)
-
-                    # delete queue was already determined in the loopback order pre-add function above.
-
-                # END Loopbacks
                 # START PPPoE
 
                 # extend interfaces_n2id with the funny_name cache, Make sure API interfaces trump funny names
@@ -11760,6 +11741,73 @@ def do_site(loaded_config, destroy, declaim=False, passed_sdk=None, passed_timeo
                     # no delete queue for 'port' class ports.
 
                 # END PORTS
+
+                # START LOOPBACKS MODIFY
+
+                config_loopbacks = get_config_interfaces_by_type(config_interfaces_defaults, 'loopback')
+                for config_interface_name, config_interface_value in config_loopbacks.items():
+
+                    local_debug("IF: {0}, PARENT2CHILD".format(config_interface_name),
+                                config_parent2child.keys())
+                    # look for unconfigurable interfaces.
+                    if config_interface_name in skip_interface_list:
+                        throw_warning("Interface {0} is not configurable.".format(config_interface_name))
+                        # dont configure this interface, break out of loop.
+                        continue
+                    # look for parent interface
+                    elif config_interface_name in config_parent2child.keys():
+                        throw_warning("Cannot configure interface {0}, it is set as a parent for {1}."
+                                      "".format(config_interface_name,
+                                                ", ".join(config_parent2child.get(config_interface_name))))
+                        # skip this interface
+                        continue
+
+                    # recombine object
+                    config_interface = recombine_named_key_value(config_interface_name, config_interface_value,
+                                                                 name_key='name')
+
+                    # no need to get interface config, no child config objects.
+
+                    # Determine interface ID.
+                    # look for implicit ID in object.
+                    implicit_interface_id = config_interface.get('id')
+                    # Loopbacks name is unsettable, use parent ID for location.
+                    name_interface_id = interfaces_n2id.get(config_interface_name)
+
+                    if implicit_interface_id is not None:
+                        interface_id = implicit_interface_id
+
+                    elif name_interface_id is not None:
+                        # look up ID by name on existing interfaces.
+                        interface_id = name_interface_id
+                    else:
+                        # no interface object.
+                        interface_id = None
+
+                    # check if interface_id was already added.
+                    if interface_id in added_loopback_list:
+                        # this interface was added above. Skip.
+                        continue
+
+                    # Create or modify interface.
+                    if interface_id is not None:
+                        # Interface exists, modify.
+                        interface_id = modify_interface(config_interface, interface_id, interfaces_n2id,
+                                                        waninterfaces_n2id, lannetworks_n2id, site_id,
+                                                        element_id, interfaces_funny_n2id=interfaces_funny_n2id,
+                                                        version=interfaces_version)
+
+                    else:
+                        # no loopbacks should ever get added here, but keep code just in case something falls through.
+                        # Interface does not exist, create.
+                        interface_id = create_interface(config_interface, interfaces_n2id, waninterfaces_n2id,
+                                                        lannetworks_n2id, site_id, element_id,
+                                                        interfaces_funny_n2id=interfaces_funny_n2id,
+                                                        version=interfaces_version)
+
+                    # delete queue was already determined in the loopback order pre-add function above.
+
+                # END Loopbacks
                 # START SERVICELINK
 
                 # extend interfaces_n2id with the funny_name cache, Make sure API interfaces trump funny names

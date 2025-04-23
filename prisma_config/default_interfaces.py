@@ -100,6 +100,7 @@ member_port = """
             ipfixfiltercontext_id: null
             peer_bypasspair_wan_port_type: 'none'
             vrf_context_id: null
+            loopback_config: null
 """
 
 default_backwards_bypasspairs = {

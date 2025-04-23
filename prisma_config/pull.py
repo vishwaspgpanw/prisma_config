@@ -1387,6 +1387,14 @@ def _pull_config_for_single_site(site_name_id):
 
                 interface_template['dhcp_relay'] = dhcp_relay_template
 
+            loopback_dict = interface.get('loopback_config', None)
+            if loopback_dict:
+                loopback_template = copy.deepcopy(loopback_dict)
+
+                name_lookup_in_template(loopback_template, 'binding_interface_id', id_name_cache)
+
+                interface_template['loopback_config'] = loopback_template
+
             nat_pools_list = interface.get('nat_pools', None)
             if nat_pools_list and isinstance(nat_pools_list, list):
                 nat_pools_list_template = []
