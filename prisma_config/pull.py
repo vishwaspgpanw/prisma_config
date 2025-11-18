@@ -2,7 +2,7 @@
 """
 Configuration EXPORT worker/script
 
-**Version:** 6.5.2b1
+**Version:** 6.6.1b1
 
 **Author:** Palo Alto Networks Inc
 

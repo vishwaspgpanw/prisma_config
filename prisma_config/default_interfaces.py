@@ -2,7 +2,7 @@
 """
 Configuration IMPORT/EXPORT default device port configurations
 
-**Version:** 6.5.2b1
+**Version:** 6.6.1b1
 
 **Author:** Prisma SDWAN
 
@@ -101,6 +101,13 @@ member_port = """
             peer_bypasspair_wan_port_type: 'none'
             vrf_context_id: null
             loopback_config: null
+            authentication_config: null
+            interface_profile_id: null
+            lldp_enabled: null
+            poe_enabled: false
+            power_usage_threshold: 0
+            switch_port_config: null
+            vlan_config: null
 """
 
 default_backwards_bypasspairs = {
